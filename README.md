@@ -1,81 +1,45 @@
-# MultiCavLaneChange
+# Two-stage cooperative lane changes for connected vehicles
 
-Multi-vehicle cooperative lane-change motion planning (MVMP) implemented in MATLAB with AMPL+IPOPT back-end. This code corresponds to the peer-reviewed article:
+[Download ZIP](https://github.com/libai1943/Cooperative_Lane_Changes_of_CAVs/archive/refs/heads/main.zip) · [Getting started](#run-one-traffic-scenario) · [Guide](#from-lane-requests-to-trajectories) · [Citation](#citation)
 
-**Bai Li, Youmin Zhang, Yiheng Feng, Yue Zhang, Yuming Ge, and Zhijiang Shao**,  
-“*Balancing Computation Speed and Quality: A Decentralized Motion Planning Method for Cooperative Lane Changes of Connected and Automated Vehicles*,”  
-**IEEE Transactions on Intelligent Vehicles**, 3(3):340–350, 2018.  
-DOI: https://doi.org/10.1109/TIV.2018.2843159
+Ten vehicles share three lanes. Each receives a starting lane and a destination lane, and a maneuver must give every vehicle room to cross. This MATLAB implementation of the 2018 IEEE T-IV method separates that task into formation adjustment and lane changing. It computes the lane-change stage first, so the formation planner knows the spacing it must deliver at the handover. [Journal article](https://doi.org/10.1109/TIV.2018.2843159)
 
----
+## Run one traffic scenario
 
-## Overview
+Use MATLAB on Windows in a writable copy of the repository. Keep the protected `.p` files and the AMPL/IPOPT runtime together. The solver needs a license that supports the problem size and the linear solver configured in `ipopt.opt`. The renderer uses MATLAB video support.
 
-This repository reproduces a two-stage MVMP pipeline:
+```matlab
+rng(1)                    % repeat the randomly drawn initial traffic task
+RunMe
+[tf1, tf2, gross_time]    % planned stage durations and their sum
+```
 
-- **Stage 2**: Computes simultaneous cooperative lane-change trajectories via a bicycle-model NLP.  
-- **Delay list**: Applies conservative horizontal translations to remove residual inter-vehicle conflicts.  
-- **Stage 1**: Performs longitudinal formation reconfiguration to obtain sparse, safe spacing while preserving the cooperative outcome.
+The driver clears the workspace and figures. It writes task and solver exchange files in the current directory, combines both stages in `coop_traj_final` and passes that trajectory to the supplied video renderer. Look at `coop_traj_final(1)` to see the first vehicle's record. `gross_time` measures the duration of the planned maneuver.
 
-The MATLAB front-end orchestrates data generation, writes AMPL initial values and parameters, calls AMPL+IPOPT to solve both stages, and renders a compact video of the resulting multi-vehicle motion.
+## From lane requests to trajectories
 
-To reduce exposure of modeling code, the AMPL `.mod` and `.run` files for both stages are generated with obfuscated filenames at runtime and deleted immediately after each solve. The solver outputs (`x.txt`, `y.txt`, `theta.txt`, `v.txt`, `a.txt`, `phy.txt`, `w.txt`, `terminal_moment.txt`) are consumed by MATLAB to assemble the final trajectories.
+| Step | Entry points | Data passed onward |
+| --- | --- | --- |
+| Define the task | [InitParams.m](InitParams.m), [GenerateTask.m](GenerateTask.m) | Geometry, vehicle limits and a random set of initial positions and destination lane centers. |
+| Plan the lane changes (stage 2) | [GenerateInitialGuessForStage2.m](GenerateInitialGuessForStage2.m), `SolveNlpAtStage2.p`, `LoadOptimumForStage2.p` | Lane-change trajectories in `coop_traj` and duration `tf2`. |
+| Resolve conflicts | [ProduceDelayList.m](ProduceDelayList.m), `IsCurTrajValidWithFixedPart.p` | Vehicles are considered from front to rear. When a trajectory conflicts with the accepted part of the formation, the relevant same-lane trajectories shift rearward in 0.5 m steps. |
+| Plan formation adjustment (stage 1) | [WriteRelativeFormationInfoForStage1.m](WriteRelativeFormationInfoForStage1.m), [GenerateInitialGuessForStage1.m](GenerateInitialGuessForStage1.m), `SolveNlpAtStage1.p` | The approach trajectories in `coop_traj0` bring the convoy into the spacing needed for the lane changes. |
+| Join and display | `StitchTwoStages.p`, `dsa.p`, [CreateVehiclePolygon.m](CreateVehiclePolygon.m) | The chronological maneuver, from initial formation to final lanes. The original renderer exports `SIM.mp4`. |
 
----
-
-## Requirements
-
-- MATLAB with VideoWriter support  
-- AMPL available on the system `PATH`  
-- IPOPT (or a compatible AMPL nonlinear solver)
-
-Windows users can run the repository as-is. If using Linux or macOS, replace the Windows `del` commands inside the generated `.run` templates with `rm -f`.
-
----
-
-## Quick start
-
-Clone the repository, open MATLAB in the repository root, and run:
-
-    runme
-
-The script initializes parameters, generates a random multi-lane task, builds a Stage 2 initial guess, solves Stage 2 and Stage 1 via AMPL+IPOPT, and finally produces a video named `SIM.mp4`.
-
-Vehicle geometry and bounds can be edited in `InitParams.m`.  
-The color palette is defined in `ProvideRGBInfo.m`.  
-The video renderer is `dsa(coop_traj)` and uses `CreateVehiclePolygon.m` to draw rectangles from the rear-axle reference.
-
----
-
-## Files of interest
-
-- `runme.m`: entry point coordinating both stages  
-- `SolveNlpAtStage2.m` and `SolveNlpAtStage1.m`: generate temporary AMPL model/run files, execute AMPL, and clean up  
-- `ProduceDelayList.m`: fixed-part validation loop and spacing translation  
-- `dsa.m`, `ProvideRGBInfo.m`, `CreateVehiclePolygon.m`: visualization functions  
-- Auxiliary scripts: writers/readers for AMPL initial values and parameter files
-
----
+In [InitParams.m](InitParams.m), the default task uses 10 cars, 3 lanes, 300 stage-1 elements and 100 stage-2 elements. [GenerateTask.m](GenerateTask.m) places the lane centers 3.75 m apart and samples the additional initial longitudinal gap up to 5 m. Fix the same random seed when comparing settings so the initial traffic is comparable.
 
 ## Citation
 
-If you use this repository in your research or derivative works, please cite:
+If you use the implementation, cite Bai Li, Youmin Zhang, Yiheng Feng, Yue Zhang, Yuming Ge and Zhijiang Shao, “Balancing Computation Speed and Quality: A Decentralized Motion Planning Method for Cooperative Lane Changes of Connected and Automated Vehicles,” *IEEE Transactions on Intelligent Vehicles* **3**(3), 340–350 (2018). [DOI](https://doi.org/10.1109/TIV.2018.2843159)
 
-    @article{Li2018MVMP,
-      author  = {Bai Li and Youmin Zhang and Yiheng Feng and Yue Zhang and Yuming Ge and Zhijiang Shao},
-      title   = {Balancing Computation Speed and Quality: A Decentralized Motion Planning Method for Cooperative Lane Changes of Connected and Automated Vehicles},
-      journal = {IEEE Transactions on Intelligent Vehicles},
-      volume  = {3},
-      number  = {3},
-      pages   = {340--350},
-      year    = {2018},
-      doi     = {10.1109/TIV.2018.2843159}
-    }
+```bibtex
+@article{Li2018MVMP,
+  author = {Bai Li and Youmin Zhang and Yiheng Feng and Yue Zhang and Yuming Ge and Zhijiang Shao},
+  title = {Balancing Computation Speed and Quality: A Decentralized Motion Planning Method for Cooperative Lane Changes of Connected and Automated Vehicles},
+  journal = {IEEE Transactions on Intelligent Vehicles},
+  volume = {3}, number = {3}, pages = {340--350}, year = {2018},
+  doi = {10.1109/TIV.2018.2843159}
+}
+```
 
----
-
-## License and usage
-
-© 2018–2025 Bai Li and collaborators. The code is provided for research and educational use. Users must cite the above article in publications or software derived from this repository. AMPL, IPOPT, and any other third-party components remain under their respective licenses. The software is provided “as is,” without warranties of any kind. For commercial licensing or collaboration, please contact the maintainer.
-
----
+© 2018–2025 Bai Li and collaborators. See the repository [license](LICENSE) and notices accompanying individual files. AMPL, IPOPT and other third-party components have their own terms. Contact the maintainer for commercial licensing or collaboration inquiries.
